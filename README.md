@@ -17,7 +17,20 @@
 - [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
 
 <!-- Plugin description -->
-Convert XML spring beans to annotation-based configurations. Add Stereotype Annotations: @Component, @Repository, @Service, @Controller, @RestController
+**Clean Your Java Classes Safely — In One Click**
+
+*Safe Dead Code Cleaner* removes unused private code from your Java classes without changing behavior.
+
+- 🧹 **Removes only unused:**
+  - Private methods
+  - Private fields
+  - Private inner classes
+  - Local variables
+- 🔒 **100% safe** — never touches public or used code
+- ⚡ **One-click cleanup** — just right-click on any class file
+
+Perfect for developers who want clean code with zero risk. No config needed.
+
 
 <!-- Plugin description end -->
 

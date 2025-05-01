@@ -1,23 +1,20 @@
 package com.github.skrcode.javarefactoringtoolkit;
 
-import com.intellij.ide.highlighter.JavaFileType;
-import com.intellij.openapi.actionSystem.AnAction;
-import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.command.WriteCommandAction;
+import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
-import com.intellij.psi.search.FileTypeIndex;
 import com.intellij.psi.search.LocalSearchScope;
-import com.intellij.psi.search.ProjectScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
+import com.intellij.psi.util.PsiTreeUtil;
 
 /**
- * Removes unused **private** members across **all** Java files in the project.
- * Only strictly private symbols inside their declaring class are considered,
- * keeping the change absolutely safe w.r.t. external callers.
+ * Removes unused **private** members only in the class the user has selected
+ * (or where the caret currently resides). Nothing outside that class will be
+ * touched, guaranteeing strictly local, safe edits.
  */
 public class CleanClassAction extends AnAction {
 
@@ -26,22 +23,36 @@ public class CleanClassAction extends AnAction {
         Project project = e.getProject();
         if (project == null) return;
 
-        PsiManager psiManager = PsiManager.getInstance(project);
+        PsiClass targetClass = findTargetClass(e);
+        if (targetClass == null) return;
 
-        WriteCommandAction.runWriteCommandAction(project, () -> {
-            for (VirtualFile vFile : FileTypeIndex.getFiles(JavaFileType.INSTANCE, ProjectScope.getProjectScope(project))) {
-                PsiFile psiFile = psiManager.findFile(vFile);
-                if (!(psiFile instanceof PsiJavaFile)) continue;
+        WriteCommandAction.runWriteCommandAction(project, () -> cleanClass(project, targetClass));
+    }
 
-                for (PsiClass psiClass : ((PsiJavaFile) psiFile).getClasses()) {
-                    cleanClass(project, psiClass);
-                }
-            }
-        });
+    /**
+     * Returns the PsiClass that is either explicitly selected in the UI or that
+     * encloses the caret position in the editor.
+     */
+    private PsiClass findTargetClass(AnActionEvent e) {
+        // 1) A class selected in the Project/Structure view
+        PsiElement element = e.getData(CommonDataKeys.PSI_ELEMENT);
+        if (element instanceof PsiClass) {
+            return (PsiClass) element;
+        }
+
+        // 2) The class at caret in an open editor
+        Editor editor = e.getData(CommonDataKeys.EDITOR);
+        PsiFile psiFile = e.getData(CommonDataKeys.PSI_FILE);
+        if (editor != null && psiFile instanceof PsiJavaFile) {
+            int offset = editor.getCaretModel().getOffset();
+            PsiElement atCaret = psiFile.findElementAt(offset);
+            return PsiTreeUtil.getParentOfType(atCaret, PsiClass.class, /* strict = */ false);
+        }
+        return null; // nothing sensible selected
     }
 
     private void cleanClass(Project project, PsiClass psiClass) {
-        // Remove unused private methods
+        // --- Remove unused private methods ---
         for (PsiMethod method : psiClass.getMethods()) {
             if (method.hasModifierProperty(PsiModifier.PRIVATE) &&
                     ReferencesSearch.search(method, new LocalSearchScope(psiClass)).findFirst() == null) {
@@ -49,7 +60,7 @@ public class CleanClassAction extends AnAction {
             }
         }
 
-        // Remove unused private fields
+        // --- Remove unused private fields ---
         for (PsiField field : psiClass.getFields()) {
             if (field.hasModifierProperty(PsiModifier.PRIVATE) &&
                     ReferencesSearch.search(field, new LocalSearchScope(psiClass)).findFirst() == null) {
@@ -57,7 +68,7 @@ public class CleanClassAction extends AnAction {
             }
         }
 
-        // Remove unused private inner classes
+        // --- Remove unused private inner classes ---
         for (PsiClass innerClass : psiClass.getInnerClasses()) {
             if (innerClass.hasModifierProperty(PsiModifier.PRIVATE) &&
                     ReferencesSearch.search(innerClass, new LocalSearchScope(psiClass)).findFirst() == null) {
@@ -65,7 +76,7 @@ public class CleanClassAction extends AnAction {
             }
         }
 
-        // Remove unused local variables
+        // --- Remove unused local variables ---
         psiClass.accept(new JavaRecursiveElementVisitor() {
             @Override
             public void visitLocalVariable(PsiLocalVariable variable) {
@@ -76,14 +87,14 @@ public class CleanClassAction extends AnAction {
             }
         });
 
-        // Reformat & shorten imports after mutation
+        // Tidy up imports and formatting
         JavaCodeStyleManager.getInstance(project).shortenClassReferences(psiClass);
         CodeStyleManager.getInstance(project).reformat(psiClass);
     }
 
     @Override
     public void update(AnActionEvent e) {
-        // Always visible; it operates on the whole project, not just the current editor file.
-        e.getPresentation().setEnabledAndVisible(e.getProject() != null);
+        // Enable only when a target class is resolvable.
+        e.getPresentation().setEnabledAndVisible(findTargetClass(e) != null);
     }
 }
