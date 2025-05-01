@@ -1,15 +1,45 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.skrcode.javarefactoringtoolkit</id>
-    <name>java-refactoring-toolkit</name>
+    <name>Java Refactoring Toolkit</name>
     <vendor>skrcode</vendor>
+    <vendor email="surajkrajan95@gmail.com" url="skrcode.github.io">Suraj Krishnan Rajan</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <description><![CDATA[
+    <p><strong>Clean Your Java Classes Safely — In One Click</strong></p>
+
+    <p><em>Safe Dead Code Cleaner</em> removes unused private code from your Java classes without changing behavior.</p>
+
+    <ul>
+      <li>🧹 <strong>Removes only unused:</strong></li>
+      <ul>
+        <li>Private methods</li>
+        <li>Private fields</li>
+        <li>Private inner classes</li>
+        <li>Local variables</li>
+      </ul>
+      <li>🔒 <strong>100% safe</strong> — never touches public or used code</li>
+      <li>⚡ <strong>One-click cleanup</strong> — just right-click on any class file</li>
+    </ul>
+
+    <p>Perfect for developers who want clean code with zero risk. No config needed.</p>
+    ]]>
+    </description>
+    <actions>
+        <action id="CleanClassAction"
+                class="com.github.skrcode.javarefactoringtoolkit.CleanClassAction"
+                text="Clean Class (Safe Dead Code Removal)"
+                description="Safely removes unused private methods, fields, inner classes, and variables.">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
+        </action>
+    </actions>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
-    <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.skrcode.javarefactoringtoolkit.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.skrcode.javarefactoringtoolkit.startup.MyProjectActivity" />
-    </extensions>
+    <applicationListeners>
+        <listener class="com.github.skrcode.javarefactoringtoolkit.listeners.MyApplicationActivationListener" topic="com.intellij.openapi.application.ApplicationActivationListener"/>
+    </applicationListeners>
 </idea-plugin>
