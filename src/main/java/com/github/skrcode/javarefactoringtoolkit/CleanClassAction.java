@@ -73,12 +73,12 @@ public class CleanClassAction extends AnAction {
         do {
             changed  = false;
             changed |= cleanUnusedMembers(cls);
-            changed |= deleteEmptyPrivateMembers(cls);
+//            changed |= deleteEmptyPrivateMembers(cls);
 //            changed |= deleteUnreachableCode(cls);
 //            changed |= mergeSingleImplInterfaces(cls);
             anyChange |= changed;
         } while (changed);   // fix‑point loop
-        tidyUp(cls);
+//        tidyUp(cls);
         return anyChange;
     }
 
@@ -141,10 +141,10 @@ public class CleanClassAction extends AnAction {
                 m.delete(); changed = true;
             }
         // private fields
-        for (PsiField f : cls.getFields())
-            if (f.hasModifierProperty(PsiModifier.PRIVATE) && ReferencesSearch.search(f, scope).findFirst() == null) {
-                f.delete(); changed = true;
-            }
+//        for (PsiField f : cls.getFields())
+//            if (f.hasModifierProperty(PsiModifier.PRIVATE) && ReferencesSearch.search(f, scope).findFirst() == null) {
+//                f.delete(); changed = true;
+//            }
         // private inner classes
         for (PsiClass inner : cls.getInnerClasses())
             if (inner.hasModifierProperty(PsiModifier.PRIVATE) && ReferencesSearch.search(inner, scope).findFirst() == null) {
@@ -171,25 +171,56 @@ public class CleanClassAction extends AnAction {
             if (!m.hasModifierProperty(PsiModifier.PRIVATE)) continue;
             PsiCodeBlock body = m.getBody();
             if (body == null || body.getStatements().length > 0) continue;
-            changed |= removeInvocationsAndDelete(m, scope);
+            changed |= removeUsagesAndDelete(m, scope);
         }
         // empty private inner classes / enums
         for (PsiClass inner : cls.getInnerClasses()) {
             if (!inner.hasModifierProperty(PsiModifier.PRIVATE)) continue;
             if (inner.getFields().length > 0 || inner.getMethods().length > 0 || inner.getInnerClasses().length > 0) continue;
-            changed |= removeInvocationsAndDelete(inner, scope);
+            changed |= removeUsagesAndDelete(inner, scope);
         }
         return changed;
     }
 
-    private boolean removeInvocationsAndDelete(PsiElement target, LocalSearchScope scope) {
+    /**
+     * Removes all references to {@code target} inside {@code scope}. For
+     * <code>new</code> expressions it deletes the surrounding statement; for
+     * variable/field declarations it drops the declaration; finally the target
+     * itself is deleted.
+     */
+    private boolean removeUsagesAndDelete(PsiElement target, LocalSearchScope scope) {
+        boolean changed = false;
         for (PsiReference ref : ReferencesSearch.search(target, scope).findAll()) {
             PsiElement el = ref.getElement();
-            PsiElement call = PsiTreeUtil.getParentOfType(el, PsiMethodCallExpression.class, PsiNewExpression.class);
-            if (call != null && call.getParent() instanceof PsiExpressionStatement) call.getParent().delete();
+
+            // 1)  "new X()" → delete whole expression statement
+            PsiNewExpression newExpr = PsiTreeUtil.getParentOfType(el, PsiNewExpression.class, false);
+            if (newExpr != null && newExpr.getParent() instanceof PsiExpressionStatement) {
+                newExpr.getParent().delete();
+                changed = true;
+                continue;
+            }
+
+            // 2)  Variable / field declarations of the target type
+            PsiVariable var = PsiTreeUtil.getParentOfType(el, PsiVariable.class, false);
+            if (var != null) {
+                if (var instanceof PsiField) {
+                    // delete private fields only (to stay on the safe side)
+                    if (((PsiField) var).hasModifierProperty(PsiModifier.PRIVATE)) {
+                        var.delete();
+                        changed = true;
+                    }
+                } else if (var instanceof PsiLocalVariable) {
+                    PsiDeclarationStatement decl = (PsiDeclarationStatement) var.getParent();
+                    // if declaration has single element -> remove whole stmt, else just the var
+                    if (decl.getDeclaredElements().length == 1) decl.delete(); else var.delete();
+                    changed = true;
+                }
+                continue;
+            }
         }
         target.delete();
-        return true;   // something definitely changed
+        return true | changed; // deletion always implies change
     }
 
     private boolean deleteUnreachableCode(PsiClass cls) {
