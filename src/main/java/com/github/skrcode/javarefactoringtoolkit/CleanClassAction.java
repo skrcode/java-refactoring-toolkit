@@ -1,5 +1,7 @@
 package com.github.skrcode.javarefactoringtoolkit;
 
+import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.dataFlow.UnreachableCodeInspection;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
@@ -19,6 +21,7 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiTreeUtil;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.intellij.openapi.actionSystem.PlatformCoreDataKeys.PSI_ELEMENT_ARRAY;
 
@@ -78,7 +81,7 @@ public class CleanClassAction extends AnAction {
 //            changed |= mergeSingleImplInterfaces(cls);
             anyChange |= changed;
         } while (changed);   // fix‑point loop
-//        tidyUp(cls);
+        tidyUp(cls);
         return anyChange;
     }
 
@@ -224,19 +227,34 @@ public class CleanClassAction extends AnAction {
     }
 
     private boolean deleteUnreachableCode(PsiClass cls) {
-        final boolean[] changed = {false};
-        cls.accept(new JavaRecursiveElementVisitor() {
-            @Override public void visitCodeBlock(PsiCodeBlock block) {
-                boolean unreachable = false;
-                for (PsiStatement s : block.getStatements()) {
-                    if (unreachable) { s.delete(); changed[0] = true; continue; }
-                    if (s instanceof PsiReturnStatement || s instanceof PsiThrowStatement ||
-                            s instanceof PsiBreakStatement  || s instanceof PsiContinueStatement) unreachable = true;
+        Project  project    = cls.getProject();
+        PsiFile  file       = cls.getContainingFile();
+        InspectionManager im = InspectionManager.getInstance(project);
+
+        // ①  Ask IntelliJ to run its own "Unreachable Code" inspection on *this file*
+        LocalInspectionTool tool = new UnreachableCodeInspection();
+        List<ProblemDescriptor> problems = tool.processFile(file, im);
+
+        if (problems.isEmpty()) return false;           // nothing to remove
+
+        AtomicBoolean changed = new AtomicBoolean(false);
+
+        // ②  Apply JetBrains‑supplied quick‑fixes, but *only* if the problem sits inside our class
+        WriteCommandAction.runWriteCommandAction(project, () -> {
+            for (ProblemDescriptor pd : problems) {
+                PsiElement problemElement = pd.getPsiElement();
+                if (!PsiTreeUtil.isAncestor(cls, problemElement, /* strict = */ false)) continue;
+
+                for (QuickFix<?> fix : pd.getFixes()) {
+                    if (fix instanceof LocalQuickFix localFix) {
+                        localFix.applyFix(project, pd);
+                        changed.set(true);
+                    }
                 }
-                super.visitCodeBlock(block);
             }
         });
-        return changed[0];
+
+        return changed.get();
     }
 
     private boolean mergeSingleImplInterfaces(PsiClass cls) {
@@ -266,8 +284,8 @@ public class CleanClassAction extends AnAction {
     private void tidyUp(PsiClass cls) {
         Project project = cls.getProject();
         JavaCodeStyleManager style = JavaCodeStyleManager.getInstance(project);
-        style.shortenClassReferences(cls);
+//        style.shortenClassReferences(cls);
         style.optimizeImports(cls.getContainingFile());
-        CodeStyleManager.getInstance(project).reformat(cls);
+//        CodeStyleManager.getInstance(project).reformat(cls);
     }
 }
