@@ -36,6 +36,15 @@
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
         </action>
     </actions>
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup
+                id="Safe Dead Code Cleaner Feedback"
+                displayType="BALLOON"
+                isLogByDefault="false"/>
+    </extensions>
+
+
+
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 

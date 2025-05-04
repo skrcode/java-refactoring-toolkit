@@ -2,9 +2,8 @@ package com.github.skrcode.javarefactoringtoolkit;
 
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.dataFlow.UnreachableCodeInspection;
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
+import com.intellij.ide.BrowserUtil;
+import com.intellij.notification.*;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Editor;
@@ -52,18 +51,43 @@ public class CleanClassAction extends AnAction {
             for (PsiClass cls : targets) anythingChanged |= cleanRecursively(cls);
             notifyResult(project, anythingChanged);
         });
+
+    }
+
+    /** Lightweight enable/disable logic; safe to run in a background thread. */
+    @Override
+    public ActionUpdateThread getActionUpdateThread() {
+        return ActionUpdateThread.BGT;   // or EDT if you need UI/PSI read locks on EDT
     }
 
     @Override
     public void update(AnActionEvent e) {
-        Project project = e.getProject();
-        e.getPresentation().setEnabledAndVisible(project != null && !collectTargetClasses(e, project).isEmpty());
+        // Enable the action only on Java files
+        PsiFile file = e.getData(CommonDataKeys.PSI_FILE);
+        e.getPresentation().setEnabledAndVisible(file instanceof PsiJavaFile);
     }
 
     private void notifyResult(Project project, boolean changed) {
         String title = "Safe Cleaner";
-        String msg   = changed ? "Cleanup complete — changes applied." : "Cleanup complete — nothing to clean.";
-        Notifications.Bus.notify(new Notification(title, title, msg, NotificationType.INFORMATION), project);
+        String msg   = changed ?
+                "Cleanup complete — changes applied. \n If the plugin helped you, please ⭐ rate it."
+                :
+                "Cleanup complete — nothing to clean.";
+        NotificationGroup group =
+                NotificationGroupManager.getInstance().getNotificationGroup("Safe Dead Code Cleaner Feedback");
+
+        Notification n = group.createNotification(
+                title,
+                msg,
+                NotificationType.INFORMATION);
+
+        if(changed) {
+            n.addAction(NotificationAction.createSimple("Rate in Marketplace",
+                    () -> BrowserUtil.browse("https://plugins.jetbrains.com/intellij/com.github.skrcode.javarefactoringtoolkit/review/new")));
+            n.addAction(NotificationAction.createSimpleExpiring("Later", () -> {
+            }));
+        }
+        n.notify(project);
     }
 
     // ────────────────────────────────────────────────────────────────────────
