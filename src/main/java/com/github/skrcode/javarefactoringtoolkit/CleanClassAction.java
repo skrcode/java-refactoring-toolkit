@@ -10,6 +10,7 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootManager;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
@@ -30,7 +31,7 @@ import static com.intellij.openapi.actionSystem.PlatformCoreDataKeys.PSI_ELEMENT
  * first compilation unit boundary, so the rest of the code‑base is untouched.
  * <p>
  * Each class is cleaned repeatedly until no further edits are possible. A final
- * IDE notification summarises whether anything changed.
+ * IDE notification summarises how many <strong>lines</strong> were deleted.
  */
 public class CleanClassAction extends AnAction {
 
@@ -47,9 +48,9 @@ public class CleanClassAction extends AnAction {
         if (targets.isEmpty()) return;
 
         WriteCommandAction.runWriteCommandAction(project, () -> {
-            boolean anythingChanged = false;
-            for (PsiClass cls : targets) anythingChanged |= cleanRecursively(cls);
-            notifyResult(project, anythingChanged);
+            int totalDeleted = 0;
+            for (PsiClass cls : targets) totalDeleted += cleanRecursively(cls);
+            notifyResult(project, totalDeleted);
         });
 
     }
@@ -67,25 +68,24 @@ public class CleanClassAction extends AnAction {
         e.getPresentation().setEnabledAndVisible(file instanceof PsiJavaFile);
     }
 
-    private void notifyResult(Project project, boolean changed) {
+    private void notifyResult(Project project, int linesDeleted) {
         String title = "Safe Cleaner";
-        String msg   = changed ?
-                "Cleanup complete — changes applied. \n If the plugin helped you, please ⭐ rate it."
-                :
-                "Cleanup complete — nothing to clean.";
-        NotificationGroup group =
-                NotificationGroupManager.getInstance().getNotificationGroup("Safe Dead Code Cleaner Feedback");
+        String msg;
+        if (linesDeleted > 0) {
+            msg = "<html>Cleanup complete — <b>removed " + linesDeleted + " lines</b>!<br>If the plugin helped you, please ⭐️ rate it.</html>";
+        } else {
+            msg = "Cleanup complete — nothing to clean.";
+        }
 
-        Notification n = group.createNotification(
-                title,
-                msg,
-                NotificationType.INFORMATION);
+        NotificationGroup group = NotificationGroupManager.getInstance()
+                .getNotificationGroup("Safe Dead Code Cleaner Feedback");
 
-        if(changed) {
+        Notification n = group.createNotification(title, msg, NotificationType.INFORMATION);
+
+        if (linesDeleted > 0) {
             n.addAction(NotificationAction.createSimple("Rate in Marketplace",
                     () -> BrowserUtil.browse("https://plugins.jetbrains.com/intellij/com.github.skrcode.javarefactoringtoolkit/review/new")));
-            n.addAction(NotificationAction.createSimpleExpiring("Later", () -> {
-            }));
+            n.addAction(NotificationAction.createSimpleExpiring("Later", () -> {}));
         }
         n.notify(project);
     }
@@ -94,19 +94,19 @@ public class CleanClassAction extends AnAction {
     // Recursive pass driver
     // ────────────────────────────────────────────────────────────────────────
 
-    private boolean cleanRecursively(PsiClass cls) {
-        boolean anyChange = false;
-        boolean changed;
+    private int cleanRecursively(PsiClass cls) {
+        int totalDeleted = 0;
+        int deleted;
         do {
-            changed  = false;
-            changed |= cleanUnusedMembers(cls);
-//            changed |= deleteEmptyPrivateMembers(cls);
-//            changed |= deleteUnreachableCode(cls);
-//            changed |= mergeSingleImplInterfaces(cls);
-            anyChange |= changed;
-        } while (changed);   // fix‑point loop
+            deleted  = 0;
+            deleted += cleanUnusedMembers(cls);
+//          deleted += deleteEmptyPrivateMembers(cls);
+//          deleted += deleteUnreachableCode(cls);
+//          deleted += mergeSingleImplInterfaces(cls);
+            totalDeleted += deleted;
+        } while (deleted > 0);   // fix‑point loop
         tidyUp(cls);
-        return anyChange;
+        return totalDeleted;
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -155,27 +155,24 @@ public class CleanClassAction extends AnAction {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Individual passes — each returns whether it made a change
+    // Individual passes — each returns number of lines deleted
     // ────────────────────────────────────────────────────────────────────────
 
-    private boolean cleanUnusedMembers(PsiClass cls) {
-        boolean changed = false;
+    private int cleanUnusedMembers(PsiClass cls) {
+        int deletedLines = 0;
         LocalSearchScope scope = new LocalSearchScope(cls);
 
         // private methods
         for (PsiMethod m : cls.getMethods())
             if (m.hasModifierProperty(PsiModifier.PRIVATE) && ReferencesSearch.search(m, scope).findFirst() == null) {
-                m.delete(); changed = true;
+                deletedLines += countLines(m);
+                m.delete();
             }
-        // private fields
-//        for (PsiField f : cls.getFields())
-//            if (f.hasModifierProperty(PsiModifier.PRIVATE) && ReferencesSearch.search(f, scope).findFirst() == null) {
-//                f.delete(); changed = true;
-//            }
         // private inner classes
         for (PsiClass inner : cls.getInnerClasses())
             if (inner.hasModifierProperty(PsiModifier.PRIVATE) && ReferencesSearch.search(inner, scope).findFirst() == null) {
-                inner.delete(); changed = true;
+                deletedLines += countLines(inner);
+                inner.delete();
             }
         // local vars
         List<PsiLocalVariable> locals = new ArrayList<>();
@@ -184,13 +181,16 @@ public class CleanClassAction extends AnAction {
                 super.visitLocalVariable(v); locals.add(v); }
         });
         for (PsiLocalVariable v : locals)
-            if (ReferencesSearch.search(v, scope).findFirst() == null) { v.delete(); changed = true; }
+            if (ReferencesSearch.search(v, scope).findFirst() == null) {
+                deletedLines += countLines(v);
+                v.delete();
+            }
 
-        return changed;
+        return deletedLines;
     }
 
-    private boolean deleteEmptyPrivateMembers(PsiClass cls) {
-        boolean changed = false;
+    private int deleteEmptyPrivateMembers(PsiClass cls) {
+        int deletedLines = 0;
         LocalSearchScope scope = new LocalSearchScope(cls);
 
         // empty private methods
@@ -198,33 +198,31 @@ public class CleanClassAction extends AnAction {
             if (!m.hasModifierProperty(PsiModifier.PRIVATE)) continue;
             PsiCodeBlock body = m.getBody();
             if (body == null || body.getStatements().length > 0) continue;
-            changed |= removeUsagesAndDelete(m, scope);
+            deletedLines += removeUsagesAndDelete(m, scope);
         }
         // empty private inner classes / enums
         for (PsiClass inner : cls.getInnerClasses()) {
             if (!inner.hasModifierProperty(PsiModifier.PRIVATE)) continue;
             if (inner.getFields().length > 0 || inner.getMethods().length > 0 || inner.getInnerClasses().length > 0) continue;
-            changed |= removeUsagesAndDelete(inner, scope);
+            deletedLines += removeUsagesAndDelete(inner, scope);
         }
-        return changed;
+        return deletedLines;
     }
 
     /**
-     * Removes all references to {@code target} inside {@code scope}. For
-     * <code>new</code> expressions it deletes the surrounding statement; for
-     * variable/field declarations it drops the declaration; finally the target
-     * itself is deleted.
+     * Removes all references to {@code target} inside {@code scope} and returns
+     * the number of lines deleted (including the target itself).
      */
-    private boolean removeUsagesAndDelete(PsiElement target, LocalSearchScope scope) {
-        boolean changed = false;
+    private int removeUsagesAndDelete(PsiElement target, LocalSearchScope scope) {
+        int deletedLines = 0;
         for (PsiReference ref : ReferencesSearch.search(target, scope).findAll()) {
             PsiElement el = ref.getElement();
 
             // 1)  "new X()" → delete whole expression statement
             PsiNewExpression newExpr = PsiTreeUtil.getParentOfType(el, PsiNewExpression.class, false);
             if (newExpr != null && newExpr.getParent() instanceof PsiExpressionStatement) {
+                deletedLines += countLines(newExpr.getParent());
                 newExpr.getParent().delete();
-                changed = true;
                 continue;
             }
 
@@ -234,55 +232,57 @@ public class CleanClassAction extends AnAction {
                 if (var instanceof PsiField) {
                     // delete private fields only (to stay on the safe side)
                     if (((PsiField) var).hasModifierProperty(PsiModifier.PRIVATE)) {
+                        deletedLines += countLines(var);
                         var.delete();
-                        changed = true;
                     }
                 } else if (var instanceof PsiLocalVariable) {
                     PsiDeclarationStatement decl = (PsiDeclarationStatement) var.getParent();
-                    // if declaration has single element -> remove whole stmt, else just the var
-                    if (decl.getDeclaredElements().length == 1) decl.delete(); else var.delete();
-                    changed = true;
+                    if (decl.getDeclaredElements().length == 1) {
+                        deletedLines += countLines(decl); decl.delete();
+                    } else {
+                        deletedLines += countLines(var); var.delete();
+                    }
                 }
                 continue;
             }
         }
+        deletedLines += countLines(target);
         target.delete();
-        return true | changed; // deletion always implies change
+        return deletedLines;
     }
 
-    private boolean deleteUnreachableCode(PsiClass cls) {
+    private int deleteUnreachableCode(PsiClass cls) {
         Project  project    = cls.getProject();
         PsiFile  file       = cls.getContainingFile();
         InspectionManager im = InspectionManager.getInstance(project);
 
-        // ①  Ask IntelliJ to run its own "Unreachable Code" inspection on *this file*
         LocalInspectionTool tool = new UnreachableCodeInspection();
         List<ProblemDescriptor> problems = tool.processFile(file, im);
-
-        if (problems.isEmpty()) return false;           // nothing to remove
+        if (problems.isEmpty()) return 0;
 
         AtomicBoolean changed = new AtomicBoolean(false);
+        AtomicBoolean countLines = new AtomicBoolean(false);
+        int[] deleted = {0};
 
-        // ②  Apply JetBrains‑supplied quick‑fixes, but *only* if the problem sits inside our class
         WriteCommandAction.runWriteCommandAction(project, () -> {
             for (ProblemDescriptor pd : problems) {
                 PsiElement problemElement = pd.getPsiElement();
-                if (!PsiTreeUtil.isAncestor(cls, problemElement, /* strict = */ false)) continue;
+                if (!PsiTreeUtil.isAncestor(cls, problemElement, false)) continue;
 
                 for (QuickFix<?> fix : pd.getFixes()) {
                     if (fix instanceof LocalQuickFix localFix) {
+                        deleted[0] += countLines(problemElement);
                         localFix.applyFix(project, pd);
                         changed.set(true);
                     }
                 }
             }
         });
-
-        return changed.get();
+        return deleted[0];
     }
 
-    private boolean mergeSingleImplInterfaces(PsiClass cls) {
-        boolean changed = false;
+    private int mergeSingleImplInterfaces(PsiClass cls) {
+        int deletedLines = 0;
         LocalSearchScope scope = new LocalSearchScope(cls);
         PsiElementFactory factory = JavaPsiFacade.getElementFactory(cls.getProject());
 
@@ -295,10 +295,10 @@ public class CleanClassAction extends AnAction {
                 PsiElement el = ref.getElement();
                 if (el instanceof PsiJavaCodeReferenceElement) el.replace(factory.createClassReferenceElement(impl));
             }
+            deletedLines += countLines(ifc);
             ifc.delete();
-            changed = true;
         }
-        return changed;
+        return deletedLines;
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -308,8 +308,14 @@ public class CleanClassAction extends AnAction {
     private void tidyUp(PsiClass cls) {
         Project project = cls.getProject();
         JavaCodeStyleManager style = JavaCodeStyleManager.getInstance(project);
-//        style.shortenClassReferences(cls);
         style.optimizeImports(cls.getContainingFile());
-//        CodeStyleManager.getInstance(project).reformat(cls);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Helper
+    // ────────────────────────────────────────────────────────────────────────
+
+    private int countLines(PsiElement element) {
+        return StringUtil.countNewLines(element.getText()) + 1;
     }
 }
