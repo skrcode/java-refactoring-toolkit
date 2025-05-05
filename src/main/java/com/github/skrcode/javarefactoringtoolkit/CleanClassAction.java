@@ -15,6 +15,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.LocalSearchScope;
 import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.search.searches.ReferencesSearch;
@@ -100,6 +101,7 @@ public class CleanClassAction extends AnAction {
         do {
             deleted  = 0;
             deleted += cleanUnusedMembers(cls);
+            deleted += cleanUnusedStatic(cls);
 //          deleted += deleteEmptyPrivateMembers(cls);
 //          deleted += deleteUnreachableCode(cls);
 //          deleted += mergeSingleImplInterfaces(cls);
@@ -107,6 +109,48 @@ public class CleanClassAction extends AnAction {
         } while (deleted > 0);   // fix‑point loop
         tidyUp(cls);
         return totalDeleted;
+    }
+
+    /**
+     * Deletes all truly‑unreferenced static fields & methods inside {@code cls}.
+     *
+     * @param cls the class to clean
+     * @return the total number of source‑lines deleted
+     */
+    private int cleanUnusedStatic(PsiClass cls) {
+        int linesDeleted = 0;
+        Project project = cls.getProject();
+        GlobalSearchScope scope = GlobalSearchScope.projectScope(project);
+
+        /* --- static methods -------------------------------------------------- */
+        for (PsiMethod m : cls.getMethods()) {
+            if (m.hasModifierProperty(PsiModifier.STATIC)
+                    && isSafeToDelete(m, scope)) {
+                linesDeleted += countLines(m);
+                m.delete();
+            }
+        }
+
+        /* --- static fields --------------------------------------------------- */
+        for (PsiField f : cls.getFields()) {
+            if (f.hasModifierProperty(PsiModifier.STATIC)
+                    && isSafeToDelete(f, scope)) {
+                linesDeleted += countLines(f);
+                f.delete();
+            }
+        }
+        return linesDeleted;
+    }
+
+    /* ---------- helpers ------------------------------------------------------- */
+
+    private boolean isSafeToDelete(PsiModifierListOwner member, GlobalSearchScope scope) {
+        // skip anything annotated (possible framework/reflective use)
+        PsiModifierList ml = member.getModifierList();
+        if (ml != null && ml.getAnnotations().length > 0) return false;
+
+        // absolutely no references anywhere in the project
+        return ReferencesSearch.search(member, scope).findFirst() == null;
     }
 
     // ────────────────────────────────────────────────────────────────────────

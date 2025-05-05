@@ -23,7 +23,7 @@
 
 - 🧹 **Removes only unused:**
   - Private methods
-  - Private fields
+  - Unannotated static variables and methods
   - Private inner classes
   - Local variables
 - 🔒 **100% safe** — never touches public or used code
