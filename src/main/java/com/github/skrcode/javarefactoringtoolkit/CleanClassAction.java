@@ -102,9 +102,6 @@ public class CleanClassAction extends AnAction {
             deleted  = 0;
             deleted += cleanUnusedMembers(cls);
             deleted += cleanUnusedStatic(cls);
-//          deleted += deleteEmptyPrivateMembers(cls);
-//          deleted += deleteUnreachableCode(cls);
-//          deleted += mergeSingleImplInterfaces(cls);
             totalDeleted += deleted;
         } while (deleted > 0);   // fix‑point loop
         tidyUp(cls);
@@ -230,26 +227,6 @@ public class CleanClassAction extends AnAction {
                 v.delete();
             }
 
-        return deletedLines;
-    }
-
-    private int deleteEmptyPrivateMembers(PsiClass cls) {
-        int deletedLines = 0;
-        LocalSearchScope scope = new LocalSearchScope(cls);
-
-        // empty private methods
-        for (PsiMethod m : cls.getMethods()) {
-            if (!m.hasModifierProperty(PsiModifier.PRIVATE)) continue;
-            PsiCodeBlock body = m.getBody();
-            if (body == null || body.getStatements().length > 0) continue;
-            deletedLines += removeUsagesAndDelete(m, scope);
-        }
-        // empty private inner classes / enums
-        for (PsiClass inner : cls.getInnerClasses()) {
-            if (!inner.hasModifierProperty(PsiModifier.PRIVATE)) continue;
-            if (inner.getFields().length > 0 || inner.getMethods().length > 0 || inner.getInnerClasses().length > 0) continue;
-            deletedLines += removeUsagesAndDelete(inner, scope);
-        }
         return deletedLines;
     }
 
