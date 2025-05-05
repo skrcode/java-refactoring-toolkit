@@ -1,10 +1,11 @@
 package com.github.skrcode.javarefactoringtoolkit;
 
-import com.intellij.codeInspection.*;
-import com.intellij.codeInspection.dataFlow.UnreachableCodeInspection;
 import com.intellij.ide.BrowserUtil;
 import com.intellij.notification.*;
-import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.module.Module;
@@ -13,16 +14,13 @@ import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
-import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.LocalSearchScope;
-import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiTreeUtil;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.intellij.openapi.actionSystem.PlatformCoreDataKeys.PSI_ELEMENT_ARRAY;
 
@@ -227,98 +225,6 @@ public class CleanClassAction extends AnAction {
                 v.delete();
             }
 
-        return deletedLines;
-    }
-
-    /**
-     * Removes all references to {@code target} inside {@code scope} and returns
-     * the number of lines deleted (including the target itself).
-     */
-    private int removeUsagesAndDelete(PsiElement target, LocalSearchScope scope) {
-        int deletedLines = 0;
-        for (PsiReference ref : ReferencesSearch.search(target, scope).findAll()) {
-            PsiElement el = ref.getElement();
-
-            // 1)  "new X()" → delete whole expression statement
-            PsiNewExpression newExpr = PsiTreeUtil.getParentOfType(el, PsiNewExpression.class, false);
-            if (newExpr != null && newExpr.getParent() instanceof PsiExpressionStatement) {
-                deletedLines += countLines(newExpr.getParent());
-                newExpr.getParent().delete();
-                continue;
-            }
-
-            // 2)  Variable / field declarations of the target type
-            PsiVariable var = PsiTreeUtil.getParentOfType(el, PsiVariable.class, false);
-            if (var != null) {
-                if (var instanceof PsiField) {
-                    // delete private fields only (to stay on the safe side)
-                    if (((PsiField) var).hasModifierProperty(PsiModifier.PRIVATE)) {
-                        deletedLines += countLines(var);
-                        var.delete();
-                    }
-                } else if (var instanceof PsiLocalVariable) {
-                    PsiDeclarationStatement decl = (PsiDeclarationStatement) var.getParent();
-                    if (decl.getDeclaredElements().length == 1) {
-                        deletedLines += countLines(decl); decl.delete();
-                    } else {
-                        deletedLines += countLines(var); var.delete();
-                    }
-                }
-                continue;
-            }
-        }
-        deletedLines += countLines(target);
-        target.delete();
-        return deletedLines;
-    }
-
-    private int deleteUnreachableCode(PsiClass cls) {
-        Project  project    = cls.getProject();
-        PsiFile  file       = cls.getContainingFile();
-        InspectionManager im = InspectionManager.getInstance(project);
-
-        LocalInspectionTool tool = new UnreachableCodeInspection();
-        List<ProblemDescriptor> problems = tool.processFile(file, im);
-        if (problems.isEmpty()) return 0;
-
-        AtomicBoolean changed = new AtomicBoolean(false);
-        AtomicBoolean countLines = new AtomicBoolean(false);
-        int[] deleted = {0};
-
-        WriteCommandAction.runWriteCommandAction(project, () -> {
-            for (ProblemDescriptor pd : problems) {
-                PsiElement problemElement = pd.getPsiElement();
-                if (!PsiTreeUtil.isAncestor(cls, problemElement, false)) continue;
-
-                for (QuickFix<?> fix : pd.getFixes()) {
-                    if (fix instanceof LocalQuickFix localFix) {
-                        deleted[0] += countLines(problemElement);
-                        localFix.applyFix(project, pd);
-                        changed.set(true);
-                    }
-                }
-            }
-        });
-        return deleted[0];
-    }
-
-    private int mergeSingleImplInterfaces(PsiClass cls) {
-        int deletedLines = 0;
-        LocalSearchScope scope = new LocalSearchScope(cls);
-        PsiElementFactory factory = JavaPsiFacade.getElementFactory(cls.getProject());
-
-        for (PsiClass ifc : cls.getInnerClasses()) {
-            if (!ifc.isInterface()) continue;
-            Collection<PsiClass> impls = ClassInheritorsSearch.search(ifc, scope, false).findAll();
-            if (impls.size() != 1) continue;
-            PsiClass impl = impls.iterator().next();
-            for (PsiReference ref : ReferencesSearch.search(ifc, scope)) {
-                PsiElement el = ref.getElement();
-                if (el instanceof PsiJavaCodeReferenceElement) el.replace(factory.createClassReferenceElement(impl));
-            }
-            deletedLines += countLines(ifc);
-            ifc.delete();
-        }
         return deletedLines;
     }
 
