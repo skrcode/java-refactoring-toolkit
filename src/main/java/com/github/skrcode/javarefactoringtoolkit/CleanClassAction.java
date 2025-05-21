@@ -157,8 +157,16 @@ public class CleanClassAction extends AnAction {
 
         PsiElement[] selection = e.getData(PSI_ELEMENT_ARRAY);
         if (selection != null && selection.length > 0) {
-            for (PsiElement el : selection) addFromElement(el, project, out);
+            // multiple selection
+            for (PsiElement el : selection) {
+                if (el instanceof PsiClass) {
+                    out.add((PsiClass)el);
+                } else {
+                    addFromElement(el, project, out);
+                }
+            }
         } else {
+            // if no selection, then consider classes at caret in the current file
             Editor editor = e.getData(CommonDataKeys.EDITOR);
             PsiFile  file  = e.getData(CommonDataKeys.PSI_FILE);
             if (editor != null && file instanceof PsiJavaFile) {
