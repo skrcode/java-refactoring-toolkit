@@ -1,6 +1,6 @@
-# java-refactoring-toolkit
+# java-auto-unit-tests
 
-![Build](https://github.com/skrcode/java-refactoring-toolkit/workflows/Build/badge.svg)
+![Build](https://github.com/skrcode/java-auto-unit-tests/workflows/Build/badge.svg)
 [![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
 
@@ -17,28 +17,25 @@
 - [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
 
 <!-- Plugin description -->
-**Clean Your Java Classes Safely — In One Click**
+**Generate Robust Unit Tests for Java — Instantly with AI**
 
-*Safe Dead Code Cleaner* removes unused private code from your Java classes without changing behavior.
+*JAIPilot - AI Unit Test Generator* helps you automatically generate complete, context-aware JUnit tests using OpenAI — directly inside IntelliJ.
 
-- 🧹 **Removes only unused:**
-  - Private methods
-  - Unannotated static variables and methods
-  - Private inner classes
-  - Local variables
-- 🔒 **100% safe** — never touches public or used code
-- ⚡ **One-click cleanup** — just right-click on any class file
+- 🧠 **Understands your code** — generates tests based on method logic, inputs, and edge cases
+- ⚡ **One-click test generation** — right-click on any class or method to generate tests instantly
+- 🔌 **Works with your OpenAI key** — no external setup or backend required
+- 🧪 **Supports standard Java & JUnit** — no custom test framework needed
 
-Perfect for developers who want clean code with zero risk. No config needed.
-
+Perfect for developers who want fast, high-coverage tests without writing boilerplate. Built for speed, simplicity, and real-world use.
 
 <!-- Plugin description end -->
+
 
 ## Installation
 
 - Using the IDE built-in plugin system:
   
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "java-refactoring-toolkit"</kbd> >
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "java-auto-unit-tests"</kbd> >
   <kbd>Install</kbd>
   
 - Using JetBrains Marketplace:
@@ -50,7 +47,7 @@ Perfect for developers who want clean code with zero risk. No config needed.
 
 - Manually:
 
-  Download the [latest release](https://github.com/skrcode/java-refactoring-toolkit/releases/latest) and install it manually using
+  Download the [latest release](https://github.com/skrcode/java-auto-unit-tests/releases/latest) and install it manually using
   <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
 
