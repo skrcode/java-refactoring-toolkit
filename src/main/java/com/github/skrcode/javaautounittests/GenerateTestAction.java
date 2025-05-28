@@ -1,10 +1,11 @@
 package com.github.skrcode.javaautounittests;
 
-import com.intellij.execution.ProgramRunnerUtil;
+import com.intellij.execution.Executor;
 import com.intellij.execution.RunManager;
 import com.intellij.execution.RunnerAndConfigurationSettings;
-import com.intellij.execution.configurations.ConfigurationType;
-import com.intellij.execution.configurations.ConfigurationTypeUtil;
+import com.intellij.execution.executors.DefaultRunExecutor;
+import com.intellij.execution.junit.JUnitConfiguration;
+import com.intellij.execution.junit.JUnitConfigurationType;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -14,6 +15,13 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaFile;
 import org.jetbrains.annotations.NotNull;
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
+import com.openai.models.ChatModel;
+import com.openai.models.responses.Response;
+import com.openai.models.responses.ResponseCreateParams;
+
+import static com.github.skrcode.javaautounittests.PromptBuilder.buildPrompt;
 
 public class GenerateTestAction extends AnAction {
 
@@ -35,42 +43,41 @@ public class GenerateTestAction extends AnAction {
         }
 
         PsiClass testClass = classes[0]; // assume first class is the test class
-        runJUnitTestForClass(project, testClass);
+        System.out.println(buildPrompt(project,testClass));
+//        invokeAI();
+//        runJUnitTestForClass(project, testClass);
+    }
+
+    private void invokeAI() {
+        OpenAIClient client = OpenAIOkHttpClient.builder().apiKey(AISettings.getInstance().getOpenAiKey()).build();
+
+        ResponseCreateParams params = ResponseCreateParams.builder()
+                .input("Say this is a test")
+                .model(ChatModel.GPT_4_1_NANO)
+                .build();
+        Response response = client.responses().create(params);
     }
 
     private void runJUnitTestForClass(Project project, PsiClass psiClass) {
-        ConfigurationType type = ConfigurationTypeUtil.findConfigurationType("JUnit");
-
-        if (!(type.getConfigurationFactories()[0].createTemplateConfiguration(project) instanceof JUnitConfiguration)) {
-            Messages.showErrorDialog(project, "JUnit run configuration not found or not supported.", "JAIPilot");
-            return;
-        }
-
+        JUnitConfigurationType type = JUnitConfigurationType.getInstance();
         RunManager runManager = RunManager.getInstance(project);
 
         RunnerAndConfigurationSettings settings = runManager.createConfiguration(
                 psiClass.getName(), type.getConfigurationFactories()[0]);
 
-        JUnitConf configuration = (JUnitConfiguration) settings.getConfiguration();
-
-        Module module = configuration.getConfigurationModule().getModule();
-        if (module == null) {
-            module = JUnitUtil.getModuleForPsiElement(psiClass); // Fallback module detection
-            if (module != null) {
-                configuration.setModule(module);
-            } else {
-                Messages.showErrorDialog(project, "Could not resolve module for test class.", "JAIPilot");
-                return;
-            }
-        }
-
+        JUnitConfiguration configuration = (JUnitConfiguration) settings.getConfiguration();
+        configuration.setModule(configuration.getConfigurationModule().getModule());
         configuration.setMainClass(psiClass);
 
         runManager.addConfiguration(settings);
         runManager.setSelectedConfiguration(settings);
-        ProgramRunnerUtil.executeConfiguration(settings, false, true);
-    }
+        Executor executor = DefaultRunExecutor.getRunExecutorInstance();
 
+
+
+
+//        ProgramRunnerUtil.executeConfiguration(settings, executor);
+    }
 
 
 }
