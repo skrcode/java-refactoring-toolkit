@@ -16,6 +16,8 @@ public class ModelDisplayAction extends AnAction {
         super("Model: " + AISettings.getInstance().getModel());
     }
 
+
+
     @Override
     public void update(@NotNull AnActionEvent e) {
         e.getPresentation().setEnabled(false);
