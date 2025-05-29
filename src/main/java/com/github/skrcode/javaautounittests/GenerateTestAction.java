@@ -14,12 +14,15 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaFile;
-import org.jetbrains.annotations.NotNull;
+import com.intellij.psi.impl.source.PsiJavaFileImpl;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.models.ChatModel;
-import com.openai.models.responses.Response;
 import com.openai.models.responses.ResponseCreateParams;
+import com.openai.models.responses.StructuredResponseCreateParams;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.stream.Collectors;
 
 import static com.github.skrcode.javaautounittests.PromptBuilder.buildPrompt;
 
@@ -43,19 +46,28 @@ public class GenerateTestAction extends AnAction {
         }
 
         PsiClass testClass = classes[0]; // assume first class is the test class
-        System.out.println(buildPrompt(project,testClass));
+       String outputResponseClass = invokeAI(buildPrompt(project,testClass));
+
+        FileWriterUtil.writeToFile(project,AISettings.getInstance().getTestDirectory()+"/"+((PsiJavaFileImpl) psiFile).getPackageName().replace(".","/"),testClass.getName()+"Test",outputResponseClass);
 //        invokeAI();
 //        runJUnitTestForClass(project, testClass);
     }
 
-    private void invokeAI() {
+    private String invokeAI(String prompt) {
         OpenAIClient client = OpenAIOkHttpClient.builder().apiKey(AISettings.getInstance().getOpenAiKey()).build();
 
-        ResponseCreateParams params = ResponseCreateParams.builder()
-                .input("Say this is a test")
+        StructuredResponseCreateParams<ResponseOutput> params = ResponseCreateParams.builder()
+                .input(prompt)
+                .text(ResponseOutput.class)
                 .model(ChatModel.GPT_4_1_NANO)
                 .build();
-        Response response = client.responses().create(params);
+
+        return client.responses().create(params).output().stream()
+                .flatMap(item -> item.message().stream())
+                .flatMap(message -> message.content().stream())
+                .flatMap(content -> content.outputText().stream())
+                .map(responseTestClass ->responseTestClass.outputTestClass).collect(Collectors.joining());
+
     }
 
     private void runJUnitTestForClass(Project project, PsiClass psiClass) {

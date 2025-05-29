@@ -12,6 +12,8 @@ public class AISettings implements PersistentStateComponent<AISettings.State> {
     public static class State {
         public String openAiKey = "";
         public String model = "gpt-3.5-turbo";
+        public String testDirectory = "";
+
     }
 
     private State state = new State();
@@ -46,4 +48,13 @@ public class AISettings implements PersistentStateComponent<AISettings.State> {
     public void setModel(String model) {
         state.model = model;
     }
+
+    public void setTestDirectory(String dir) {
+        state.testDirectory = dir;
+    }
+
+    public String getTestDirectory() {
+        return state.testDirectory;
+    }
+
 }
