@@ -15,7 +15,7 @@ public class PromptBuilder {
         StringBuilder sb = new StringBuilder();
 
         // 1. Full source of the right-clicked class
-        sb.append("Generate high quality robust unit tests. Output is only the test class. Package is same.");
+        sb.append("Generate high quality robust unit tests. Output is only the test class. Include all imports and class package.");
         sb.append("// Class\n");
         sb.append(targetClass.getText()).append("\n\n");
 
