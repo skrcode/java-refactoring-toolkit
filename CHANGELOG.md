@@ -1,6 +1,6 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# java-refactoring-toolkit Changelog
+# java-auto-unit-tests Changelog
 
 ## [Unreleased]
 ### Added
